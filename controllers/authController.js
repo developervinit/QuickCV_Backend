@@ -2,7 +2,7 @@
 const User = require('../models/User');
 const { generateTokens, verifyToken } = require('../utils/jwtUtils');
 const { validateEmail, validatePassword } = require('../utils/validationUtils');
-const googleAuthService = require('../services/googleAuthService');
+const createGoogleAuthService = require('../services/googleAuthService');
 
 // Email/Password Signup
 const signup = async (req, res) => {
@@ -109,10 +109,12 @@ const login = async (req, res) => {
 // Google OAuth
 const googleAuth = (req, res) => {
   try {
+    const googleAuthService = createGoogleAuthService(); // Create new instance
     const authUrl = googleAuthService.generateAuthUrl();
     res.redirect(authUrl);
   } catch (error) {
-    res.status(500).json({ message: 'Authentication failed' });
+    console.error('Google auth error:', error);
+    res.status(500).json({ message: 'Authentication failed: ' + error.message });
   }
 };
 
@@ -125,6 +127,7 @@ const googleAuthCallback = async (req, res) => {
       return res.status(400).json({ message: 'Authorization code required' });
     }
 
+    const googleAuthService = createGoogleAuthService(); // Create new instance
     // Get user info from Google
     const googleUser = await googleAuthService.getGoogleUser(code);
     
@@ -135,10 +138,11 @@ const googleAuthCallback = async (req, res) => {
     const redirectUrl = `${process.env.FRONTEND_URL}/login?token=${accessToken}&refreshToken=${refreshToken}&userId=${user._id}`;
     res.redirect(redirectUrl);
   } catch (error) {
-    console.error('Google auth error:', error);
-    res.status(500).json({ message: 'Authentication failed' });
+    console.error('Google auth callback error:', error);
+    res.status(500).json({ message: 'Authentication failed: ' + error.message });
   }
 };
+
 
 // Get current user info
 const getCurrentUser = async (req, res) => {

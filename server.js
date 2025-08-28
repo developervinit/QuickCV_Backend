@@ -5,6 +5,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const authRoutes = require("./routes/authRoutes");
 
 // Load environment variables
 dotenv.config();
@@ -41,6 +42,9 @@ mongoose.connection.on('error', (err) => {
 app.get('/', (req, res) => {
   res.json({ message: 'Resume Builder API is running!' });
 });
+
+// Make sure this line is present and correct in your server.js
+app.use('/api/auth', authRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
