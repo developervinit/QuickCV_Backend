@@ -53,7 +53,6 @@ const signup = async (req, res) => {
       refreshToken
     });
   } catch (error) {
-    console.error('Signup error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -101,7 +100,6 @@ const login = async (req, res) => {
       refreshToken
     });
   } catch (error) {
-    console.error('Login error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -113,7 +111,6 @@ const googleAuth = (req, res) => {
     const authUrl = googleAuthService.generateAuthUrl();
     res.redirect(authUrl);
   } catch (error) {
-    console.error('Google auth error:', error);
     res.status(500).json({ message: 'Authentication failed: ' + error.message });
   }
 };
@@ -138,7 +135,6 @@ const googleAuthCallback = async (req, res) => {
     const redirectUrl = `${process.env.FRONTEND_URL}/login?token=${accessToken}&refreshToken=${refreshToken}&userId=${user._id}`;
     res.redirect(redirectUrl);
   } catch (error) {
-    console.error('Google auth callback error:', error);
     res.status(500).json({ message: 'Authentication failed: ' + error.message });
   }
 };
@@ -187,7 +183,7 @@ const refreshToken = async (req, res) => {
     // Generate new tokens
     const { accessToken: newAccessToken, refreshToken: newRefreshToken } = generateTokens(user._id);
     
-    // Update refresh token in database
+    // Update refresh token in database (token rotation)
     user.refreshToken = newRefreshToken;
     await user.save();
     
@@ -196,6 +192,13 @@ const refreshToken = async (req, res) => {
       refreshToken: newRefreshToken
     });
   } catch (error) {
+    // ADD BETTER ERROR HANDLING
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Refresh token expired' });
+    }
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ message: 'Invalid refresh token format' });
+    }
     res.status(401).json({ message: 'Invalid refresh token' });
   }
 };

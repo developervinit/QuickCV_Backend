@@ -12,12 +12,6 @@ class GoogleAuthService {
     // Check if already initialized
     if (this.oauth2Client) return;
 
-    // Debug logs
-    console.log('Initializing Google OAuth...');
-    console.log('GOOGLE_CLIENT_ID:', process.env.GOOGLE_CLIENT_ID ? 'SET' : 'NOT SET');
-    console.log('GOOGLE_CLIENT_SECRET:', process.env.GOOGLE_CLIENT_SECRET ? 'SET' : 'NOT SET');
-    console.log('GOOGLE_CALLBACK_URL:', process.env.GOOGLE_CALLBACK_URL);
-
     // Validate environment variables
     if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET || !process.env.GOOGLE_CALLBACK_URL) {
       throw new Error('Google OAuth credentials are not properly configured in environment variables');
@@ -29,7 +23,6 @@ class GoogleAuthService {
       process.env.GOOGLE_CALLBACK_URL
     );
 
-    console.log('Google OAuth client initialized successfully');
   }
 
   generateAuthUrl() {
@@ -44,7 +37,6 @@ class GoogleAuthService {
         prompt: 'consent'
       });
     } catch (error) {
-      console.error('Error generating auth URL:', error);
       throw error;
     }
   }
@@ -65,9 +57,9 @@ class GoogleAuthService {
       });
 
       const { data } = await oauth2.userinfo.get();
-      return { ...data, refreshToken: tokens.refresh_token };
+      // FIX: Don't try to use Google's refresh token - we'll generate our own
+      return { ...data }; // REMOVED refreshToken: tokens.refresh_token
     } catch (error) {
-      console.error('Google OAuth error:', error);
       throw new Error('Failed to fetch user from Google: ' + error.message);
     }
   }
@@ -85,24 +77,27 @@ class GoogleAuthService {
           googleId: googleUser.id,
           email: googleUser.email,
           name: googleUser.name,
-          profilePicture: googleUser.picture,
-          refreshToken: googleUser.refreshToken
+          profilePicture: googleUser.picture
+          // FIX: Don't set refreshToken here - we'll generate it after
         });
         await user.save();
-        console.log('New user created:', user._id);
       } else {
         // Update existing user info
         user.name = googleUser.name;
         user.profilePicture = googleUser.picture;
-        user.refreshToken = googleUser.refreshToken;
+        // FIX: Don't update refreshToken here
         await user.save();
-        console.log('Existing user updated:', user._id);
       }
 
+      // FIX: Generate tokens AFTER user is saved to database
       const { accessToken, refreshToken } = generateTokens(user._id);
+      
+      // FIX: Save the refresh token to the user in database
+      user.refreshToken = refreshToken;
+      await user.save();
+      
       return { user, accessToken, refreshToken };
     } catch (error) {
-      console.error('User creation/update error:', error);
       throw new Error('Failed to create or update user: ' + error.message);
     }
   }
