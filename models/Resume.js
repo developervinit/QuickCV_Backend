@@ -1,6 +1,8 @@
 // QuickCV_Backend/models/Resume.js
 const mongoose = require('mongoose');
 
+const VALID_AI_PROVIDERS = ['openai', 'gemini'];
+
 const resumeSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
@@ -65,11 +67,39 @@ const resumeSchema = new mongoose.Schema({
   aiGeneratedVersions: [{
     pdfUrl: String,
     prompt: String,
+    provider: {
+      type: String,
+      enum: VALID_AI_PROVIDERS
+    },
+    suggestions: [String],
     createdAt: {
       type: Date,
       default: Date.now
     }
   }],
+  aiSettings: {
+    provider: {
+      type: String,
+      enum: VALID_AI_PROVIDERS,
+      default: 'openai'
+    },
+    prompt: {
+      type: String,
+      default: ''
+    }
+  },
+  generationStatus: {
+    type: String,
+    enum: ['pending', 'processing', 'completed', 'failed'],
+    default: 'pending'
+  },
+  latestPdfUrl: String,
+  latestSuggestions: [String],
+  lastGenerationProvider: {
+    type: String,
+    enum: VALID_AI_PROVIDERS
+  },
+  lastGenerationError: String,
   createdAt: {
     type: Date,
     default: Date.now

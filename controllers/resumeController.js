@@ -1,13 +1,49 @@
 // QuickCV_Backend/controllers/resumeController.js
 const Resume = require('../models/Resume');
 const User = require('../models/User');
+const aiService = require('../services/aiService');
+const pdfService = require('../services/pdfService');
+
+const getBaseUrl = (req) => {
+  if (process.env.BACKEND_URL) {
+    return process.env.BACKEND_URL.replace(/\/$/, '');
+  }
+  const protocol = req.protocol;
+  const host = req.get('host');
+  return `${protocol}://${host}`;
+};
 
 // Create a new resume
 const createResume = async (req, res) => {
   try {
+    const { aiSettings = {} } = req.body || {};
+    const selectedProvider = aiSettings.provider || 'openai';
+    const customPrompt = aiSettings.prompt || '';
+
+    // Helper to remove _id and id from subdocuments (fixes UUID vs ObjectId cast error)
+    const cleanIds = (items) => {
+      if (!Array.isArray(items)) return [];
+      return items.map(item => {
+        const { _id, id, ...rest } = item;
+        return rest;
+      });
+    };
+
     const resumeData = {
       ...req.body,
-      user: req.user._id
+      workExperience: cleanIds(req.body.workExperience),
+      education: cleanIds(req.body.education),
+      certifications: cleanIds(req.body.certifications),
+      projects: cleanIds(req.body.projects),
+      languages: cleanIds(req.body.languages),
+      user: req.user._id,
+      aiSettings: {
+        provider: selectedProvider,
+        prompt: customPrompt
+      },
+      generationStatus: 'processing',
+      lastGenerationProvider: selectedProvider,
+      lastGenerationError: null
     };
 
     const resume = new Resume(resumeData);
@@ -18,7 +54,43 @@ const createResume = async (req, res) => {
       $push: { resumes: resume._id }
     });
 
-    res.status(201).json(resume);
+    try {
+      const aiResult = await aiService.generateResumeContent(
+        resumeData,
+        customPrompt,
+        selectedProvider
+      );
+
+      const filename = `resume_${Date.now()}_${req.user._id}.pdf`;
+      const pdfPath = await pdfService.generateResumePDF(aiResult.optimizedResume, filename);
+      const baseUrl = getBaseUrl(req);
+      const pdfUrl = `${baseUrl}${pdfPath}`;
+
+      resume.aiGeneratedVersions.push({
+        pdfUrl,
+        prompt: customPrompt,
+        provider: selectedProvider,
+        suggestions: aiResult.suggestions
+      });
+
+      resume.latestPdfUrl = pdfUrl;
+      resume.latestSuggestions = aiResult.suggestions;
+      resume.generationStatus = 'completed';
+      resume.lastGenerationProvider = selectedProvider;
+      resume.lastGenerationError = null;
+      await resume.save();
+
+      res.status(201).json({
+        message: 'Resume created and AI-optimized PDF generated successfully.',
+        resume
+      });
+    } catch (generationError) {
+      console.error('AI generation error:', generationError);
+      resume.generationStatus = 'failed';
+      resume.lastGenerationError = generationError.message;
+      await resume.save();
+      res.status(500).json({ message: 'Resume saved, but AI generation failed. Please try regenerating.', error: generationError.message });
+    }
   } catch (error) {
     console.error('Create resume error:', error);
     res.status(500).json({ message: 'Failed to create resume' });
