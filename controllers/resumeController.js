@@ -3,6 +3,8 @@ const Resume = require('../models/Resume');
 const User = require('../models/User');
 const aiService = require('../services/aiService');
 const pdfService = require('../services/pdfService');
+const fs = require('fs');
+const path = require('path');
 
 const getBaseUrl = (req) => {
   if (process.env.BACKEND_URL) {
@@ -148,7 +150,8 @@ const updateResume = async (req, res) => {
 // Delete a resume
 const deleteResume = async (req, res) => {
   try {
-    const resume = await Resume.findOneAndDelete({
+    // 1. Find the resume first to get the file path
+    const resume = await Resume.findOne({
       _id: req.params.id,
       user: req.user._id
     });
@@ -157,13 +160,34 @@ const deleteResume = async (req, res) => {
       return res.status(404).json({ message: 'Resume not found' });
     }
 
+    // 2. Delete the physical file if it exists
+    if (resume.latestPdfUrl) {
+      try {
+        // Extract filename from URL (e.g., http://localhost:5000/uploads/resume_123.pdf -> resume_123.pdf)
+        const filename = resume.latestPdfUrl.split('/').pop();
+        const filePath = path.join(__dirname, '../uploads', filename);
+
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+          console.log(`Deleted file: ${filePath}`);
+        }
+      } catch (fileErr) {
+        console.error('Error deleting file:', fileErr);
+        // Continue with DB deletion even if file deletion fails
+      }
+    }
+
+    // 3. Delete from Database
+    await Resume.findByIdAndDelete(resume._id);
+
     // Remove resume from user's resume list
     await User.findByIdAndUpdate(req.user._id, {
       $pull: { resumes: req.params.id }
     });
 
-    res.json({ message: 'Resume deleted successfully' });
+    res.json({ message: 'Resume and associated file deleted successfully' });
   } catch (error) {
+    console.error('Delete resume error:', error);
     res.status(500).json({ message: 'Failed to delete resume' });
   }
 };
